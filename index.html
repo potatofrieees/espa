@@ -1433,24 +1433,7 @@ body::after {
     transform: translateY(-1px);
 }
 
-.conf {
-    position: fixed;
-    pointer-events: none;
-    z-index: 9001;
-    border-radius: 2px;
-    animation: cfall var(--d,1.2s) ease-out forwards;
-}
-
-@keyframes cfall {
-    0% {
-        opacity: 1;
-        transform: translate(0,0)rotate(0)scale(1);
-    }
-    100% {
-        opacity: 0;
-        transform: translate(var(--tx,0),var(--ty,100vh))rotate(var(--r,540deg))scale(.25);
-    }
-}
+.conf-gone { display: none; } /* unused — confetti is canvas-only now */
 
 /* milestone gold variant */
 .milestone-box {
@@ -2206,15 +2189,8 @@ function openMilestoneModal(emoji, title, msg){
   document.getElementById('mlMsg').innerHTML     = msg;
   milestoneModal.classList.add('open');
   document.body.style.overflow='hidden';
-  // 🎉 Big gold confetti
-  const cx=window.innerWidth/2, cy=window.innerHeight/2;
-  const cols=['#e0ba80','#c8985a','#fbbf24','#f0c0cf','#cf6e89','#7fcfda','#fff','#86efac'];
-  for(let i=0;i<100;i++){
-    const c=document.createElement('div');c.className='conf';
-    const ang=Math.random()*Math.PI*2, d=140+Math.random()*260;
-    c.style.cssText=`left:${cx}px;top:${cy}px;width:${6+Math.random()*11}px;height:${6+Math.random()*11}px;background:${cols[Math.floor(Math.random()*cols.length)]};border-radius:${Math.random()>.5?'50%':'3px'};--tx:${Math.cos(ang)*d}px;--ty:${Math.sin(ang)*d-120}px;--r:${Math.random()*720-360}deg;--d:${.9+Math.random()}.s;`;
-    document.body.appendChild(c);c.addEventListener('animationend',()=>c.remove());
-  }
+  // canvas confetti burst — no DOM elements, no stuck divs
+  spawnConfetti(100);
 }
 function closeMilestoneModal(triggerVictory){
   milestoneModal.classList.remove('open');
@@ -2235,7 +2211,8 @@ let victoryFrame=0, victoryRAF=null, victoryStars=[], victoryHearts=[], victoryF
 function startVictoryScreen(){
   // seed decorative particles
   victoryStars=[];
-  for(let i=0;i<28;i++) victoryStars.push({
+  const starCount = window.innerWidth < 600 ? 14 : 28;
+  for(let i=0;i<starCount;i++) victoryStars.push({
     x:Math.random()*W, y:Math.random()*H,
     r:2+Math.random()*4, speed:.4+Math.random()*.8,
     angle:Math.random()*Math.PI*2,
@@ -2398,15 +2375,77 @@ function checkMilestone(n){
   setTimeout(()=>openMilestoneModal(m.emoji,m.title,m.msg),750);
 }
 
-// ── confetti burst ────────────────────────────────────────────────────────────
-function burst(src){
-  const r=src.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
-  const colors=['#cf6e89','#c8985a','#f0c0cf','#9a78c8','#5aacb8','#f9a8d4','#86efac','#fbbf24','#e0ba80'];
-  for(let i=0;i<52;i++){
-    const c=document.createElement('div');c.className='conf';
-    const ang=Math.random()*Math.PI*2,d=90+Math.random()*180;
-    c.style.cssText=`left:${cx}px;top:${cy}px;width:${5+Math.random()*8}px;height:${5+Math.random()*8}px;background:${colors[Math.floor(Math.random()*colors.length)]};border-radius:${Math.random()>.5?'50%':'3px'};--tx:${Math.cos(ang)*d}px;--ty:${Math.sin(ang)*d-90}px;--r:${Math.random()*720-360}deg;--d:${.75+Math.random()*.7}s;`;
-    document.body.appendChild(c);c.addEventListener('animationend',()=>c.remove());
+// ── confetti burst (canvas-only, no DOM elements) ─────────────────────────────
+function burst(src){ spawnConfetti(40); }
+
+// ── canvas confetti system ────────────────────────────────────────────────────
+let confettiParticles = [];
+let confettiRAF = null;
+let confettiCanvas = null, confettiCtx = null;
+
+function ensureConfettiCanvas(){
+  if(confettiCanvas) return;
+  confettiCanvas = document.createElement('canvas');
+  confettiCanvas.style.cssText='position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9001;';
+  document.body.appendChild(confettiCanvas);
+  resizeConfettiCanvas();
+  window.addEventListener('resize', resizeConfettiCanvas);
+  confettiCtx = confettiCanvas.getContext('2d');
+}
+function resizeConfettiCanvas(){
+  if(!confettiCanvas) return;
+  confettiCanvas.width  = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+
+function spawnConfetti(n){
+  ensureConfettiCanvas();
+  const cols=['#e0ba80','#c8985a','#fbbf24','#f0c0cf','#cf6e89','#7fcfda','#fff','#86efac','#e49db5'];
+  const cx = window.innerWidth/2, cy = window.innerHeight/2;
+  for(let i=0;i<n;i++){
+    const ang = Math.random()*Math.PI*2;
+    const spd = 4 + Math.random()*8;
+    confettiParticles.push({
+      x:cx, y:cy,
+      vx: Math.cos(ang)*spd,
+      vy: Math.sin(ang)*spd - 6,
+      r: 4 + Math.random()*6,
+      col: cols[Math.floor(Math.random()*cols.length)],
+      life: 1,
+      rot: Math.random()*Math.PI*2,
+      rotV: (Math.random()-.5)*.3,
+      sq: Math.random() > .5,
+    });
+  }
+  if(!confettiRAF) confettiLoop();
+}
+
+function confettiLoop(){
+  if(!confettiCtx) return;
+  confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+  confettiParticles = confettiParticles.filter(p=>p.life>0.02);
+  confettiParticles.forEach(p=>{
+    p.x  += p.vx;
+    p.y  += p.vy;
+    p.vy += 0.25; // gravity
+    p.vx *= 0.98;
+    p.life -= 0.018;
+    p.rot += p.rotV;
+    confettiCtx.save();
+    confettiCtx.globalAlpha = p.life;
+    confettiCtx.translate(p.x, p.y);
+    confettiCtx.rotate(p.rot);
+    confettiCtx.fillStyle = p.col;
+    if(p.sq){ confettiCtx.fillRect(-p.r/2,-p.r/2,p.r,p.r); }
+    else { confettiCtx.beginPath(); confettiCtx.arc(0,0,p.r/2,0,Math.PI*2); confettiCtx.fill(); }
+    confettiCtx.restore();
+  });
+  if(confettiParticles.length > 0){
+    confettiRAF = requestAnimationFrame(confettiLoop);
+  } else {
+    confettiRAF = null;
+    // clear canvas fully when done
+    confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
   }
 }
 
@@ -2432,7 +2471,17 @@ let espaImg=null,espaImgLoaded=false;
 // ── game modal ────────────────────────────────────────────────────────────────
 const gameModal=document.getElementById('gameModal'),gameModalOv=document.getElementById('gameModalOv'),gmClose=document.getElementById('gmClose'),gameLauncher=document.getElementById('gameLauncher');
 function openGameModal(){gameModal.classList.add('open');document.body.style.overflow='hidden';setTimeout(()=>{if(!gameRunning)drawStart();},60);}
-function closeGameModal(){gameModal.classList.remove('open');document.body.style.overflow='';if(victoryRAF){cancelAnimationFrame(victoryRAF);victoryRAF=null;}if(gameRunning){gameRunning=false;if(raf){cancelAnimationFrame(raf);raf=null;}}}
+function closeGameModal(){
+  gameModal.classList.remove('open');
+  document.body.style.overflow='';
+  if(victoryRAF){cancelAnimationFrame(victoryRAF);victoryRAF=null;}
+  if(raf){cancelAnimationFrame(raf);raf=null;}
+  gameRunning=false;
+  // kill any leftover confetti
+  confettiParticles=[];
+  if(confettiRAF){cancelAnimationFrame(confettiRAF);confettiRAF=null;}
+  if(confettiCtx) confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+}
 gameLauncher.addEventListener('click',openGameModal);
 gameLauncher.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openGameModal();}});
 gameModalOv.addEventListener('click',closeGameModal);gmClose.addEventListener('click',closeGameModal);
@@ -2556,7 +2605,10 @@ function drawHUD(){
   ctx.fillStyle='rgba(200,152,90,.9)';ctx.font='12px Jost,sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';ctx.fillText('Best '+bestScore,W-10,22);
   if(flashTimer>0){flashTimer--;ctx.globalAlpha=Math.min(1,flashTimer/14);ctx.font='bold 18px Cormorant Garamond,serif';ctx.shadowColor='rgba(0,0,0,.8)';ctx.shadowBlur=8;ctx.fillStyle=flashColor;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(flashMsg,W/2,H/2);ctx.shadowBlur=0;ctx.globalAlpha=1;}
 }
-function pAdd(x,y,n,cols){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*3;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1.5,life:1,col:cols[Math.floor(Math.random()*cols.length)],r:3+Math.random()*4});}}
+function pAdd(x,y,n,cols){
+  const max = window.innerWidth < 600 ? Math.floor(n/2) : n;
+  for(let i=0;i<max;i++){const a=Math.random()*Math.PI*2,s=1+Math.random()*3;particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-1.5,life:1,col:cols[Math.floor(Math.random()*cols.length)],r:3+Math.random()*4});}
+}
 function hAdd(x,y,e='💜'){hearts.push({x,y,e,life:1,size:15+Math.random()*10,t:Math.random()*6.28});}
 function flash(m,c,d=55){flashMsg=m;flashColor=c;flashTimer=d;}
 
@@ -2627,6 +2679,9 @@ function drawGameOverScreen(){
 function resetGame(){
   P.row=0;P.col=.5;P.targX=P.col*W;P.targY=rowMidY(0);P.drawX=P.targX;P.drawY=P.targY;P.hitFlash=0;P.invincible=0;P.scaredTimer=0;P.nearCarDist=999;
   lives=3;crossings=0;frame=0;moveTimer=0;particles=[];hearts=[];flashTimer=0;shakeTimer=0;gameOver=false;gameRunning=false;milestoneFired={};
+  confettiParticles=[];
+  if(confettiRAF){cancelAnimationFrame(confettiRAF);confettiRAF=null;}
+  if(confettiCtx) confettiCtx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
   if(victoryRAF){cancelAnimationFrame(victoryRAF);victoryRAF=null;}
   if(raf){cancelAnimationFrame(raf);raf=null;}
   scoreEl.textContent='0';bestEl.textContent=bestScore;
