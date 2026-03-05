@@ -2300,10 +2300,10 @@ const PS=Math.floor(RS*1.55);
 
 const ROWDEFS=[
   {type:'safe',    bg:'#111a0e'},
-  {type:'traffic', bg:'#1a1822',dir: 1,spd:.55,veh:['🚗','🚕','🚙']},
-  {type:'traffic', bg:'#141520',dir:-1,spd:.50,veh:['🚌','🚚']},
-  {type:'traffic', bg:'#1a1822',dir: 1,spd:.50,veh:['🚗','🚓','🛻']},
-  {type:'traffic', bg:'#141520',dir:-1,spd:.60,veh:['🏍️','🚕','🚗']},
+  {type:'traffic', bg:'#1a1822',dir: 1,spd:.60,veh:['🚗','🚕','🚙']},
+  {type:'traffic', bg:'#141520',dir:-1,spd:.55,veh:['🚌','🚚']},
+  {type:'traffic', bg:'#1a1822',dir: 1,spd:.55,veh:['🚗','🚓','🛻']},
+  {type:'traffic', bg:'#141520',dir:-1,spd:.65,veh:['🏍️','🚕','🚗']},
   {type:'safe',    bg:'#0d1a0a'},
 ];
 function rowTopY(r){return H-(r+1)*RS;}
@@ -2526,3 +2526,4 @@ canvas.addEventListener('click',()=>{if(!gameRunning&&!gameOver)startGame();if(g
 </script>
 </body>
 </html>
+
